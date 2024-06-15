@@ -117,7 +117,10 @@ class MultiHeadedAttention(nn.Module):
                 for i in range(self.n_heads)
             ]
         )
-        self.wo = nn.Linear(self.n_heads * vdim, self.d_model, bias=bias)
+        self.wo = nn.Sequential(
+            nn.Linear(self.n_heads * vdim, self.d_model, bias=bias),
+            nn.ReLU()
+        )
 
     def forward(
         self, key: Tensor, query: Tensor, value: Tensor, mask: Optional[Tensor] = None
@@ -200,7 +203,7 @@ class DecoderLayer(nn.Module):
             src + self.dropout1(self.masked_multihead_attn(src, src, src, mask))
         )
         trg = self.layer_norm2(
-            trg + self.dropout2(self.multihead_attn(memory, memory, trg))
+            trg + self.dropout2(self.multihead_attn(memory, trg, memory))
         )
         # trg = self.layer_norm2(
         #     trg + self.dropout2(self.multihead_attn(memory, memory, trg, mask))

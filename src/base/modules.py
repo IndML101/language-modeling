@@ -72,7 +72,7 @@ class AbstractBatchLoader(AbstractLoaders):
     def make_batch(self, data: Tensor, batch_size: int):
         seq_len = data.size(0) // batch_size
         data = data[: seq_len * batch_size]
-        data = data.view(batch_size, seq_len).t().contiguous()
+        data = data.view(seq_len, batch_size).contiguous()
         return data
 
     def run(self):

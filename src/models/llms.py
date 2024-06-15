@@ -57,7 +57,16 @@ class Transformer(nn.Module):
             epsilon=epsilon,
         )
         self.feed_forward = nn.Linear(d_model, n_tokens)
-        self.init_weights()
+        # self.init_weights()
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def init_weights(self):
         init_range = 0.1
@@ -89,7 +98,8 @@ class Transformer(nn.Module):
             .expand(enc_out.shape[0], enc_out.shape[1], enc_out.shape[-1])
         )
         dec_out = self.decoder(trg, enc_out, mask)
-        output = F.softmax(self.feed_forward(dec_out), dim=-1)
+        # output = F.softmax(self.feed_forward(dec_out), dim=-1)
+        output = self.feed_forward(dec_out)
         # print(output)
         return output
         # return self.feed_forward(dec_out)
@@ -148,7 +158,16 @@ class PreTrainedDecoder(nn.Module):
             epsilon=epsilon,
         )
         self.feed_forward = nn.Linear(d_model, n_tokens)
-        self.init_weights()
+        # self.init_weights()
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def init_weights(self):
         init_range = 0.1
@@ -233,7 +252,8 @@ class GPT(nn.Module):
             epsilon=epsilon,
         )
         self.feed_forward = nn.Linear(d_model, n_tokens)
-        self.init_weights()
+        # self.init_weights()
+        self.apply(self._init_weights)
 
     def init_weights(self):
         init_range = 0.1
@@ -245,6 +265,14 @@ class GPT(nn.Module):
         self.feed_forward.weight.data.uniform_(-init_range, init_range)
         # self.embedding.bias.data.zero_()
         # self.embedding.weight.data.uniform_(-init_range, init_range)s
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def make_decoder_mask(self):
         pass

@@ -1,3 +1,4 @@
+import numpy as np
 from typing import Tuple
 from torch import Tensor
 from src.base.modules import AbstractBatchLoader
@@ -13,6 +14,8 @@ class EncoderDecoderLLMBatchLoader(AbstractBatchLoader):
         seq_len = min(max_seq_len, len(data) - 1 - idx)
         source = data[idx : idx + seq_len // 2, :]
         target = data[idx + seq_len // 2 : idx + seq_len, :]
+        # indices = np.random.shuffle(np.arange(len(source[1])))
+        # return source[:,indices], target[:,indices]
         return source, target
 
     def load_decoder_batch(self, data: Tensor, idx: int, max_seq_len: int) -> Tuple[Tensor, Tensor]:
@@ -20,7 +23,8 @@ class EncoderDecoderLLMBatchLoader(AbstractBatchLoader):
         source = data[idx : idx + seq_len, :]
         target = data[idx + 1 : idx + 1 + seq_len, :]
         return source, target
-
+        # indices = np.random.shuffle(np.arange(len(source)))
+        # return source[indices,:,:], target[indices,:,:]
 
 
 class DecoderLLMBatchLoader(AbstractBatchLoader):
@@ -34,6 +38,8 @@ class DecoderLLMBatchLoader(AbstractBatchLoader):
         source = data[idx : idx + seq_len, :]
         target = data[idx + 1 : idx + 1 + seq_len, :]
         return source, target
+        # indices = np.random.shuffle(np.arange(len(source)))
+        # return source[indices,:,:], target[indices,:,:]
 
 
 class BERTBatchLoader(AbstractBatchLoader):

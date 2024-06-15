@@ -1,4 +1,6 @@
 import os
+import random
+import numpy as np
 from src.base.modules import AbstractTrainers, AbstractDataProcessor
 from src.models.llms import Transformer, PreTrainedDecoder, GPT
 from src.dataset.batches import EncoderDecoderLLMBatchLoader, DecoderLLMBatchLoader
@@ -24,7 +26,9 @@ class TransformerTrainer(AbstractTrainers):
         **model_kwargs,
     ):
         super(TransformerTrainer, self).__init__()
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.__dict__.update(**model_kwargs)
+        self.kwargs = model_kwargs
+        self.device = self.kwargs['device']
         self.batch_size = batch_size
         if isinstance(text_processor, str):
             self.text_processor = self.load_text_processor(text_processor)
@@ -33,7 +37,7 @@ class TransformerTrainer(AbstractTrainers):
         train, val, test = self.text_processor.run()
         self.n_tokens = self.text_processor.get_vocab_size()
         self.model = Transformer(
-            device=self.device, n_tokens=self.n_tokens, **model_kwargs
+            n_tokens=self.n_tokens, **model_kwargs
         )
         if model is not None:
             self.model.load_state_dict(torch.load(model))
@@ -103,13 +107,18 @@ class TransformerTrainer(AbstractTrainers):
         log_interval = 100
         start_time = time.time()
 
-        num_batches = self.train.shape[0] // self.batch_size
-        for batch, i in enumerate(range(0, self.train.size(0) - 1, self.batch_size)):
+        num_batches = self.train.shape[0] // self.max_seq_length
+        for batch, i in enumerate(range(num_batches)):
+        # for batch, i in enumerate(range(0, self.train.size(0) - 1, self.batch_size)):
+            idx = np.random.randint(0, self.train.size(0)-self.max_seq_length-1)
+            # shuffle_idx = np.random.shuffle(np.arange(len(self.train))).to_list()
+            # input_data = self.train[shuffle_idx,:]
+            # random.shuffle(self.train)
             enc_src, enc_trg = self.enc_batch_loader.load(
-                self.train, i, self.max_seq_length
+                self.train, idx, self.max_seq_length
             )
             dec_src, dec_trg = self.enc_batch_loader.load_decoder_batch(
-                self.train, i + enc_src.shape[0], enc_src.shape[0]
+                self.train, idx + enc_src.shape[0], enc_src.shape[0]
             )
             dec_trg_mask = self.make_target_mask(dec_trg)
             output = self.model(
@@ -126,9 +135,10 @@ class TransformerTrainer(AbstractTrainers):
 
             self.optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
+            # torch.nn.utils.clip_grad_norm_(self.model.parameters(), 0.5)
             self.optimizer.step()
             step_loss = loss.item()
+            # print(step_loss)
             total_loss += step_loss
 
             if batch % log_interval == 0 and batch > 0:
@@ -147,8 +157,9 @@ class TransformerTrainer(AbstractTrainers):
     def _evaluate(self):
         self.model.eval()  # turn on evaluation mode
         total_loss = 0.0
+        num_batches = self.val.size(0)//self.max_seq_length
         with torch.no_grad():
-            for i in range(0, self.val.size(0) - 1, self.batch_size):
+            for i in range(0, self.val.size(0) - 1, self.max_seq_length):
                 enc_src, enc_trg = self.enc_batch_loader.load(
                     self.val, i, self.max_seq_length
                 )
@@ -157,6 +168,7 @@ class TransformerTrainer(AbstractTrainers):
                 )
                 dec_trg_mask = self.make_target_mask(dec_trg)
                 seq_len = enc_src.size(0)
+                # print(enc_src.shape)
                 output = self.model(
                     enc_src.to(self.device),
                     dec_src.to(self.device),
@@ -164,14 +176,12 @@ class TransformerTrainer(AbstractTrainers):
                 )
                 # output_flat = output.view(-1, ntokens)
                 target = self.make_target(dec_trg)
-                total_loss += (
-                    seq_len
-                    * self.criterion(
+                total_loss += self.criterion(
                         output.transpose(0, 1).transpose(1, -1),
                         target.to(self.device).transpose(0, 1).transpose(1, -1),
                     ).item()
-                )
-        return total_loss / (self.val.size(0) - 1)
+
+        return total_loss / num_batches
 
     def run(self, n_epochs: int = 10000, last_val_loss: float = float("inf")):
         best_val_loss = last_val_loss
@@ -217,6 +227,32 @@ class TransformerTrainer(AbstractTrainers):
 
             self.lr_scheduler.step()
         # model.load_state_dict(torch.load(best_model_params_path))
+
+    def generate_text(self, enc_text, dec_text, n_tokes=100):
+        self.model.eval()
+        with torch.no_grad():
+            enc_src = self.text_processor.process_data(enc_text).unsqueeze(1).to(self.device, dtype=torch.long)
+            dec_src = self.text_processor.process_data(dec_text).unsqueeze(1).to(self.device, dtype=torch.long)
+            tokens = list()
+
+            # print(dec_src.shape)
+
+            for i in range(n_tokes):
+                # print(i)
+                output = self.model(
+                    enc_src,
+                    dec_src,
+                    None
+                )
+
+                # print(torch.argmax(dec_src, -1).squeeze(-1))
+                output = torch.argmax(output, -1)
+                # print(output.shape)
+                tokens.append(output.squeeze(-1)[-1].item())
+                dec_src = torch.concat((dec_src, output[-1].unsqueeze(1)), 0)
+
+            return ' '.join(self.text_processor.vocab.lookup_tokens(tokens))
+
 
 
 class TransformerDecoderTrainer(TransformerTrainer):
